@@ -1,0 +1,8 @@
+# Local Variables & Configuration
+.env
+
+# Python
+/env
+
+# Visual Studio
+/.vscode
