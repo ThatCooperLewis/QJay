@@ -191,7 +191,6 @@ class SearchTools():
     # def search_playlists(self, query):
         # return self._search(query, 'playlist')
 
-    
 
 if __name__ == '__main__':
     _log = Logger('QJay')
