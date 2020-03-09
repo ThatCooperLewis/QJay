@@ -1,6 +1,6 @@
 # Standard Library
 import os
-import logging
+import time
 # Additional modules
 import wget
 import kivy
@@ -8,7 +8,7 @@ import spotipy
 import spotipy.util as sputil
 # Custom modules
 import utils
-import time
+from logger import Logger
 
 
 class SpotipyClient():
@@ -20,6 +20,8 @@ class SpotipyClient():
         username = self._get_spotipy_env('SPOTIPY_USERNAME')
         scope = self._get_spotipy_env('SPOTIPY_SCOPE')
         token = sputil.prompt_for_user_token(username, scope)
+        _log = Logger('SpotipyClient')
+        self.error = _log.error
 
         if token:
             self.client = spotipy.Spotify(auth=token)
@@ -38,7 +40,7 @@ class SpotipyClient():
             exit()
 
     def _alert_missing(self, var_name):
-        logging.error('Missing the necessary config for {}'.format(var_name))
+        self.error('Missing the necessary config for {}'.format(var_name))
         return False
 
     def get_client(self):
@@ -104,16 +106,19 @@ class Artist():
 
 class Album():
 
-    def __init__(self, album_dict):
-        self.update(album_dict)
+    def __init__(self, album_dict, full_details=None):
+        self.update(album_dict, full_details)
 
-    def update(self, album):
+    def update(self, album, full_details=None):
         self.uri = album['uri']
         self.name = album['name']
         self.type = album['album_type']
         self.cover = album['images'][0]['url']
         self.cover_sm = album['images'][2]['url']
         self.artist = Artist(album['artists'])
+
+    def add_full_details(self, album_details):
+        return
 
 
 class NowPlaying():
@@ -124,8 +129,12 @@ class NowPlaying():
         self.client = client
         track_data, playback_data = self._get_current_data()
         self.track = Track(track_data, playback_dict=playback_data)
-        self.log = self._info_logging
-        self.debug = self._debug_logging
+        # Declare logger class & shortcut its functions
+        _log = Logger('NowPlaying')
+        self.log = _log.info
+        self.debug = _log.debug
+        self.error = _log.error
+        self.warn = _log.warn
 
     def _get_current_data(self):
         track_data = None
@@ -141,13 +150,6 @@ class NowPlaying():
         self.debug('Updating current song...')
         self.debug('{0} - {1}'.format(self.track.name, self.track.artist))
         # TODO: Have this communicate with frontend, so visuals/text update in tandem
-
-    def _debug_logging(self, message: str):
-        # TODO: move this better place
-        logging.debug('NowPlaying: {}'.format(message))
-
-    def _info_logging(self, message: str):
-        logging.info('NowPlaying: {}'.format(message))
 
     def get_track(self):
         result = self.client.current_playback()
@@ -190,7 +192,7 @@ class NowPlaying():
 
     def seek(self, ms_start):
         if ms_start > self.track.duration:
-            logging.warning('NowPlaying: Scrub position longer than song!')
+            self.warn('NowPlaying: Scrub position longer than song!')
             return
         self.client.seek_track(ms_start)
 
@@ -199,7 +201,7 @@ class NowPlaying():
 
     def repeat(self, mode='context'):
         if mode not in ['context', 'track', 'off']:
-            logging.warning(
+            self.warn(
                 'NowPlaying: Invalid mode provided for track-repeat')
             return
         self.log('Setting repeat mode to "{}"'.format(mode))
@@ -216,7 +218,7 @@ class NowPlaying():
 
     def set_volume(self, percent_vol):
         if not 0 <= percent_vol <= 100:
-            logging.warning('NowPlaying: Invalid volume level!')
+            self.warn('NowPlaying: Invalid volume level!')
             return
         self.client.volume(percent_vol)
 
@@ -226,6 +228,8 @@ class SearchTools():
     def __init__(self, client, limit=20):
         self.client = client
         self.limit = limit
+        _log = Logger('SearchTools')
+        self.log = _log.info
 
     def _search(self, query, typeString, typeClass):
         # Pass the proper type/class to search using a given query
@@ -235,7 +239,7 @@ class SearchTools():
         result = utils.clean_track_dict(result)
         if result:
             result = result['{}s'.format(typeString)]['items']
-            logging.info('# of search results: {}'.format(len(result)))
+            self.log('# of search results: {}'.format(len(result)))
             for item in result:
                 item_list.append(typeClass(item))
             return item_list
@@ -244,6 +248,8 @@ class SearchTools():
 
     def set_results_limit(self, limit: int):
         self.limit = limit
+
+    def get_album
 
     # def search_all(self, query):
         # return self._search(query, 'track,artist,album,playlist')
@@ -263,12 +269,14 @@ class SearchTools():
     
 
 if __name__ == '__main__':
+    _log = Logger('QJay')
+    log = _log.info
     sp_client = SpotipyClient().client
     playing = NowPlaying(sp_client)
     search = SearchTools(sp_client)
     tracklist = search.search_albums("King Gizzard")
     for track in tracklist:
-        logging.info(utils.pretty_print_album(track))
+        log(utils.pretty_print_album(track))
     # with open('output.json', 'w+') as fileboi:
         # fileboi.write(utils.pretty_print_json())
         # fileboi.close()
