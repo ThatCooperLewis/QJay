@@ -3,6 +3,7 @@
 
 # Python
 /env
+/__pycache__
 
 # Visual Studio
 /.vscode

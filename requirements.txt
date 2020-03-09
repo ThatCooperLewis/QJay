@@ -1,3 +1,4 @@
 Kivy==1.11.1
 spotipy==2.9.0
 wget==3.2
+boltons==20.0.0

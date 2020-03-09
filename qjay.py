@@ -96,22 +96,15 @@ class NowPlaying():
         # TODO: Have this communicate with frontend, so visuals/text update in tandem
 
     def _debug_logging(self, message: str):
+        # TODO: move this better place
         logging.debug('NowPlaying: {}'.format(message))
 
     def _info_logging(self, message: str):
         logging.info('NowPlaying: {}'.format(message))
 
-    def clean_track_dict(self, track_dict):
-        # Remove verbose (and useless) lists from the track dict
-        # For debugging purposes only
-        track_dict.pop('available_markets', None)
-        track_dict['item'].pop('available_markets', None)
-        track_dict['item']['album'].pop('available_markets', None)
-        return track_dict
-
     def get_track(self):
         result = self.client.current_playback()
-        clean_result = self.clean_track_dict(result)
+        clean_result = utils.clean_track_dict(result)
         self.track.update(clean_result)
         return self.track
 
@@ -180,6 +173,20 @@ class NowPlaying():
         self.client.volume(percent_vol)
 
 
+class Searching():
+
+    def __init__(self, client):
+        self.client = client
+
+    def search_all(self, query):
+        result = self.client.search(query)
+        return utils.clean_track_dict(result)
+
+
 if __name__ == '__main__':
     sp_client = SpotipyClient().client
     playing = NowPlaying(sp_client)
+    search = Searching(sp_client)
+    with open('output.json', 'w+') as fileboi:
+        fileboi.write(utils.pretty_print_json(search.search_all('Tetrachromacy')))
+        fileboi.close()
