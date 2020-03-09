@@ -2,6 +2,7 @@
 import json
 from boltons.iterutils import remap
 
+
 def pretty_print_json(blob: dict):
     # Debug tool
     return json.dumps(blob, indent=4, sort_keys=True)
@@ -15,10 +16,33 @@ def milliseconds_to_mins(ms: int):
     minutes = "{:02d}".format(minutes)
     return minutes, seconds
 
+
+def parse_artists_dict(artists):
+    artist_str, artist_list = '', []
+    for index, artist in enumerate(artists):
+        name = artist['name']
+        artist_list.append('name')
+        artist_str += name
+        if index < (len(artists) - 1):
+            artist_str += ', '
+    return artist_str, artist_list
+
+
 def clean_track_dict(track_dict):
-    return remove_keys_from_dict(track_dict, ['available_markets', 'external_ids', 'preview_url', 'external_urls', 'href'])
+    if track_dict:
+        return remove_keys_from_dict(track_dict, ['available_markets', 'external_ids', 'preview_url', 'external_urls', 'href'])
+    else:
+        return None
+
 
 def remove_keys_from_dict(input_dict, key_list: list):
     bad_keys = set(key_list)
-    drop_keys = lambda path, key, value: key not in bad_keys
+    def drop_keys(path, key, value): return key not in bad_keys
     return remap(input_dict, visit=drop_keys)
+
+
+def pretty_print_track(trackObj):
+    return '{} - {} - {}'.format(trackObj.name, trackObj.artist.name, trackObj.album.name)
+
+def pretty_print_album(albumObj):
+    return '{} - {} - {}'.format(albumObj.name, albumObj.artist.name, albumObj.type)

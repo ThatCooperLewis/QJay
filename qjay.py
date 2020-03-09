@@ -8,6 +8,7 @@ import spotipy
 import spotipy.util as sputil
 # Custom modules
 import utils
+import time
 
 
 class SpotipyClient():
@@ -49,34 +50,70 @@ class Track():
     # This bad boy makes parsing track blobs easier
     # Pass in your typical playback dictionary from Spotipy.current_playback()
 
-    def __init__(self, playback_dict):
-        self.update(playback_dict)
+    def __init__(self, track_dict, playback_dict=None):
+        if not track_dict:
+            return
+        self.update(track_dict, playback_dict)
 
-    def update(self, track_dict):
-        item = track_dict['item']
-        self.uri = item['uri']
-        self.name = item['name']
-        self.album = item['album']['name']
-        self.duration = item['duration_ms']
-        self.elapsed = track_dict['progress_ms']
-        self.is_playing = track_dict['is_playing']
-        self.shuffle = track_dict['shuffle_state']
-        self.repeat = track_dict['repeat_state']
-        self.context_uri = track_dict['context']['uri']
-        self.cover = item['album']['images'][0]['url']
-        self.cover_sm = item['album']['images'][2]['url']
-        # Get a string and iterable list of multiple artists (if applicable)
-        self.artist, self.artist_list = self._parse_artists(item['artists'])
+    def update(self, track, playback_dict=None):
+        self.uri = track['uri']
+        self.name = track['name']
+        self.duration = track['duration_ms']
+        self.album = Album(track['album'])
+        self.artist = Artist(track['artists'])
+        if playback_dict:
+            self.add_playback_metadata(playback_dict)
 
-    def _parse_artists(self, artists):
+    def add_playback_metadata(self, playback_dict):
+        self.elapsed = playback_dict['progress_ms']
+        self.is_playing = playback_dict['is_playing']
+        self.shuffle = playback_dict['shuffle_state']
+        self.repeat = playback_dict['repeat_state']
+        self.context_uri = playback_dict['context']['uri']
+
+
+class Artist():
+
+    def __init__(self, artist_list: list):
+        self.update(artist_list)
+
+    def update(self, artist_list):
+        # TODO: figure out listed format
+        self.name, self.name_list = self._parse_artist_names(artist_list)
+        self.uri, self.uri_list = self._parse_artist_uris(artist_list)
+
+    def _parse_artist_names(self, artists: list):
         artist_str, artist_list = '', []
         for index, artist in enumerate(artists):
             name = artist['name']
-            artist_list.append('name')
+            artist_list.append(name)
             artist_str += name
             if index < (len(artists) - 1):
                 artist_str += ', '
         return artist_str, artist_list
+
+    def _parse_artist_uris(self, artists: list):
+        # Set primary from first artist (usually most important)
+        # Make a list of all of them
+        primary_artist_uri = artists[0]['uri']
+        artist_uri_list = []
+        for artist in artists:
+            artist_uri_list.append(artist['uri'])
+        return primary_artist_uri, artist_uri_list
+
+
+class Album():
+
+    def __init__(self, album_dict):
+        self.update(album_dict)
+
+    def update(self, album):
+        self.uri = album['uri']
+        self.name = album['name']
+        self.type = album['album_type']
+        self.cover = album['images'][0]['url']
+        self.cover_sm = album['images'][2]['url']
+        self.artist = Artist(album['artists'])
 
 
 class NowPlaying():
@@ -85,14 +122,24 @@ class NowPlaying():
 
     def __init__(self, client):
         self.client = client
-        self.track = Track(self.client.current_playback())
+        track_data, playback_data = self._get_current_data()
+        self.track = Track(track_data, playback_dict=playback_data)
         self.log = self._info_logging
         self.debug = self._debug_logging
 
+    def _get_current_data(self):
+        track_data = None
+        playback_data = self.client.current_playback()
+        if playback_data:
+            track_data = playback_data.get('item')
+        return track_data, playback_data
+
     def _refresh(self):
+        playback_data = self.client.current_playback()
+        track_data = playback_data['item']
+        self.track.update(track_data, playback_data)
         self.debug('Updating current song...')
         self.debug('{0} - {1}'.format(self.track.name, self.track.artist))
-        self.track.update(self.client.current_playback())
         # TODO: Have this communicate with frontend, so visuals/text update in tandem
 
     def _debug_logging(self, message: str):
@@ -109,14 +156,15 @@ class NowPlaying():
         return self.track
 
     def get_track_art(self):
-        image_url = self.track.cover
+        image_url = self.track.album.cover
         self.log('Album URL - {}'.format(image_url))
         return image_url
 
     def save_track_art(self, filepath='current.jpg'):
         if os.path.isfile(filepath):
             os.remove(filepath)
-        filename = wget.download(self.track.cover, out=filepath, bar=None)
+        filename = wget.download(
+            self.track.album.cover, out=filepath, bar=None)
         self.log('Album cover saved to {}'.format(filename))
         return filename
 
@@ -179,34 +227,48 @@ class SearchTools():
         self.client = client
         self.limit = limit
 
-    def _search(self, query, search_type):
-        result = self.client.search(query, type=search_type, limit=self.limit)
-        return utils.clean_track_dict(result)
+    def _search(self, query, typeString, typeClass):
+        # Pass the proper type/class to search using a given query
+        # Example: _search('Lady Gaga', 'artist', Artist)
+        item_list = []
+        result = self.client.search(query, type=typeString, limit=self.limit)
+        result = utils.clean_track_dict(result)
+        if result:
+            result = result['{}s'.format(typeString)]['items']
+            logging.info('# of search results: {}'.format(len(result)))
+            for item in result:
+                item_list.append(typeClass(item))
+            return item_list
+        else:
+            return None
 
     def set_results_limit(self, limit: int):
         self.limit = limit
 
-    def search_all(self, query):
-        return self._search(query, 'track,artist,album,playlist')
+    # def search_all(self, query):
+        # return self._search(query, 'track,artist,album,playlist')
 
-    def search_songs(self, query):
-        return self._search(query, 'track')
+    def search_tracks(self, query):
+        return self._search(query, 'track', Track)
 
     def search_artists(self, query):
-        return self._search(query, 'artist')
+        return self._search(query, 'artist', Artist)
 
     def search_albums(self, query):
-        return self._search(query, 'album')
+        return self._search(query, 'album', Album)
 
-    def search_playlists(self, query):
-        return self._search(query, 'playlist')
+    # def search_playlists(self, query):
+        # return self._search(query, 'playlist')
 
-
+    
 
 if __name__ == '__main__':
     sp_client = SpotipyClient().client
     playing = NowPlaying(sp_client)
     search = SearchTools(sp_client)
-    with open('output.json', 'w+') as fileboi:
-        fileboi.write(utils.pretty_print_json(search.search_playlists("Coop's Scoops")))
-        fileboi.close()
+    tracklist = search.search_albums("King Gizzard")
+    for track in tracklist:
+        logging.info(utils.pretty_print_album(track))
+    # with open('output.json', 'w+') as fileboi:
+        # fileboi.write(utils.pretty_print_json())
+        # fileboi.close()
