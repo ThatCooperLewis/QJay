@@ -1,36 +1,52 @@
-import os, json, requests, logging
+import os
+import json
+import requests
+import logging
 import wget
+from time import sleep
 import kivy
 import spotipy
 import spotipy.util as util
 
+
 def pretty_print_json(blob: dict):
+    # Debug tool
     print(json.dumps(blob, indent=4, sort_keys=True))
 
-def return_none(none_count=1):
-    # For initializing empty class variables in bulk
-    return tuple(None for x in range(none_count))
+def milliseconds_to_mins(ms: int):
+    ms = float(ms)
+    seconds=int((ms/1000)%60)
+    seconds="{:02d}".format(seconds)
+    minutes=int((ms/(1000*60))%60)
+    minutes="{:02d}".format(minutes)
+    return minutes, seconds
 
 
 class SpotipyClient():
 
-    # The sole purpose of this class is to authenticate the client's 
-    # connection to Spotify API, so it can be passed into other classes 
+    # The sole purpose of this class is to authenticate the client's
+    # connection to Spotify API, so it can be passed into other classes
 
     def __init__(self):
         username = self._get_spotipy_env('SPOTIPY_USERNAME')
-        scope    = self._get_spotipy_env('SPOTIPY_SCOPE')
-        token    = util.prompt_for_user_token(username, scope)
+        scope = self._get_spotipy_env('SPOTIPY_SCOPE')
+        token = util.prompt_for_user_token(username, scope)
 
-        if token:   self.client = spotipy.Spotify(auth=token)
-        else:       self._alert_missing('Spotipy authentication token'); exit()
+        if token:
+            self.client = spotipy.Spotify(auth=token)
+        else:
+            self._alert_missing('Spotipy authentication token')
+            exit()
 
     def _get_spotipy_env(self, var_name):
         # Get necessary environment variables
         # If they don't exist, raise log alert and exit
         env_var = os.getenv(var_name, default=False)
-        if env_var:     return env_var
-        else:           self._alert_missing(var_name); exit()
+        if env_var:
+            return env_var
+        else:
+            self._alert_missing(var_name)
+            exit()
 
     def _alert_missing(self, var_name):
         logging.error('Missing the necessary config for {}'.format(var_name))
@@ -43,23 +59,23 @@ class SpotipyClient():
 class Track():
 
     # This bad boy makes parsing track blobs easier
-    # Pass in your typical track dictionary from Spotipy 
+    # Pass in your typical playback dictionary from Spotipy.current_playback()
 
-    def __init__(self, track_dict):
-        self.name, self.artist_list, self.album, self.cover, self.cover_sm = return_none(5)
-        self.is_playing, self.duration, self.elapsed, self.uri = return_none(4)
-        self.update(track_dict)
+    def __init__(self, playback_dict):
+        self.update(playback_dict)
 
     def update(self, track_dict):
         item = track_dict['item']
-        self.uri        = item['uri']
-        self.name       = item['name']
-        self.album      = item['album']['name']
-        self.duration   = item['duration_ms']
-        self.elapsed    = track_dict['progress_ms']
+        self.uri = item['uri']
+        self.name = item['name']
+        self.album = item['album']['name']
+        self.duration = item['duration_ms']
+        self.elapsed = track_dict['progress_ms']
         self.is_playing = track_dict['is_playing']
-        self.cover      = item['album']['images'][0]['url']
-        self.cover_sm   = item['album']['images'][2]['url']
+        self.shuffle = track_dict['shuffle_state']
+        self.repeat = track_dict['repeat_state']
+        self.cover = item['album']['images'][0]['url']
+        self.cover_sm = item['album']['images'][2]['url']
         # Get a string and iterable list of multiple artists (if applicable)
         self.artist, self.artist_list = self._parse_artists(item['artists'])
 
@@ -69,7 +85,8 @@ class Track():
             name = artist['name']
             artist_list.append('name')
             artist_str += name
-            if index < (len(artists) - 1): artist_str += ', '
+            if index < (len(artists) - 1):
+                artist_str += ', '
         return artist_str, artist_list
 
 
@@ -79,8 +96,15 @@ class NowPlaying():
 
     def __init__(self, client):
         self.client = client
-        self.track = Track(self.client.current_user_playing_track())
-    
+        self.track = Track(self.client.current_playback())
+
+    def _refresh(self):
+        logging.debug('NowPlaying: Updating current song...')
+        logging.debug(
+            'NowPlaying: {0} - {1}'.format(self.track.name, self.track.artist))
+        self.track.update(self.client.current_playback())
+        # TODO: Have this communicate with frontend, so visuals/text update in tandem
+
     def clean_track_dict(self, track_dict):
         # Remove verbose (and useless) lists from the track dict
         # For debugging purposes only
@@ -89,7 +113,7 @@ class NowPlaying():
         track_dict['item']['album'].pop('available_markets', None)
         return track_dict
 
-    def get_track(self, init=False):
+    def get_track(self):
         result = self.client.current_playback()
         clean_result = self.clean_track_dict(result)
         self.track.update(clean_result)
@@ -97,34 +121,60 @@ class NowPlaying():
 
     def get_track_art(self):
         image_url = self.track.cover
-        logging.info('ALBUM IMAGE URL: {}'.format(image_url))
+        logging.info('NowPlaying: Album URL - {}'.format(image_url))
         return image_url
 
     def save_track_art(self, filepath='current.jpg'):
-        if os.path.isfile(filepath): os.remove(filepath)
+        if os.path.isfile(filepath):
+            os.remove(filepath)
         filename = wget.download(self.track.cover, out=filepath, bar=None)
+        logging.info('NowPlaying: Album cover saved to {}'.format(filename))
         return filename
 
+    def play_pause(self):
+        self._refresh()
+        if self.track.is_playing:
+            self.client.pause_playback()
+            logging.info('NowPlaying: Paused track')
+        else:
+            self.client.start_playback()
+            logging.info('NowPlaying: Resumed track')
+
     def next(self):
-        logging.info('Playing next song')
+        logging.info('NowPlaying: Playing next song')
         self.client.next_track()
+        self._refresh()
 
     def previous(self):
-        logging.info('Playing previous song')
+        # NOTE: This doesn't start over the current song, like most "previous" buttons do
+        logging.info('NowPlaying: Playing previous song')
         self.client.previous_track()
+        self._refresh()
 
     def shuffle(self, state: bool):
         self.client.shuffle(state)
-    
+
     def repeat(self, mode='context'):
         if mode not in ['context', 'track', 'off']:
-            logging.error('NowPlaying: Invalid mode provided to track-repeat function. Only off/track/context allowed!')
+            logging.error('NowPlaying: Invalid mode provided for track-repeat')
             exit()
+        logging.info('NowPlaying: Setting repeat mode to "{}"'.format(mode))
         self.client.repeat(mode)
+
+    def get_sequencer_status(self):
+        # Return the shuffle/play status of the current track
+        self._refresh()
+        return self.track.shuffle, self.track.repeat
+
+    def get_progress(self):
+        self._refresh()
+        return milliseconds_to_mins(self.track.elapsed)
+
 
 if __name__ == '__main__':
     sp_client = SpotipyClient().client
-    playing   = NowPlaying(sp_client)
-    playing.repeat('poop')
-    # path = playing.save_track_art()
-    # playing.shuffle(True)
+    playing = NowPlaying(sp_client)
+    while True:
+        time = playing.get_progress()
+        # print('Time elapsed: {}:{}'.format(time[0], time[1]), end='\r')
+        sleep(0.25)
