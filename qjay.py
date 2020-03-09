@@ -173,20 +173,40 @@ class NowPlaying():
         self.client.volume(percent_vol)
 
 
-class Searching():
+class SearchTools():
 
-    def __init__(self, client):
+    def __init__(self, client, limit=20):
         self.client = client
+        self.limit = limit
+
+    def _search(self, query, search_type):
+        result = self.client.search(query, type=search_type, limit=self.limit)
+        return utils.clean_track_dict(result)
+
+    def set_results_limit(self, limit: int):
+        self.limit = limit
 
     def search_all(self, query):
-        result = self.client.search(query)
-        return utils.clean_track_dict(result)
+        return self._search(query, 'track,artist,album,playlist')
+
+    def search_songs(self, query):
+        return self._search(query, 'track')
+
+    def search_artists(self, query):
+        return self._search(query, 'artist')
+
+    def search_albums(self, query):
+        return self._search(query, 'album')
+
+    def search_playlists(self, query):
+        return self._search(query, 'playlist')
+
 
 
 if __name__ == '__main__':
     sp_client = SpotipyClient().client
     playing = NowPlaying(sp_client)
-    search = Searching(sp_client)
+    search = SearchTools(sp_client)
     with open('output.json', 'w+') as fileboi:
-        fileboi.write(utils.pretty_print_json(search.search_all('Tetrachromacy')))
+        fileboi.write(utils.pretty_print_json(search.search_playlists("Coop's Scoops")))
         fileboi.close()

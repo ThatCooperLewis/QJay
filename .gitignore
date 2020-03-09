@@ -11,3 +11,6 @@
 
 # Spotipy caching
 .cache**
+
+# My own shenanigans
+output.json
