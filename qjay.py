@@ -1,27 +1,13 @@
+# Standard Library
 import os
-import json
-import requests
 import logging
+# Additional modules
 import wget
-from time import sleep
 import kivy
 import spotipy
-import spotipy.util as util
-
-
-def pretty_print_json(blob: dict):
-    # Debug tool
-    print(json.dumps(blob, indent=4, sort_keys=True))
-
-
-
-def milliseconds_to_mins(ms: int):
-    ms = float(ms)
-    seconds = int((ms/1000) % 60)
-    seconds = "{:02d}".format(seconds)
-    minutes = int((ms/(1000*60)) % 60)
-    minutes = "{:02d}".format(minutes)
-    return minutes, seconds
+import spotipy.util as sputil
+# Custom modules
+import utils
 
 
 class SpotipyClient():
@@ -32,7 +18,7 @@ class SpotipyClient():
     def __init__(self):
         username = self._get_spotipy_env('SPOTIPY_USERNAME')
         scope = self._get_spotipy_env('SPOTIPY_SCOPE')
-        token = util.prompt_for_user_token(username, scope)
+        token = sputil.prompt_for_user_token(username, scope)
 
         if token:
             self.client = spotipy.Spotify(auth=token)
@@ -172,7 +158,8 @@ class NowPlaying():
 
     def repeat(self, mode='context'):
         if mode not in ['context', 'track', 'off']:
-            logging.warning('NowPlaying: Invalid mode provided for track-repeat')
+            logging.warning(
+                'NowPlaying: Invalid mode provided for track-repeat')
             return
         self.log('Setting repeat mode to "{}"'.format(mode))
         self.client.repeat(mode)
@@ -184,13 +171,14 @@ class NowPlaying():
 
     def get_progress(self):
         self._refresh()
-        return milliseconds_to_mins(self.track.elapsed)
+        return utils.milliseconds_to_mins(self.track.elapsed)
 
     def set_volume(self, percent_vol):
         if not 0 <= percent_vol <= 100:
             logging.warning('NowPlaying: Invalid volume level!')
             return
         self.client.volume(percent_vol)
+
 
 if __name__ == '__main__':
     sp_client = SpotipyClient().client
