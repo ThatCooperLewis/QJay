@@ -14,6 +14,7 @@ def pretty_print_json(blob: dict):
     print(json.dumps(blob, indent=4, sort_keys=True))
 
 
+
 def milliseconds_to_mins(ms: int):
     ms = float(ms)
     seconds = int((ms/1000) % 60)
@@ -171,8 +172,8 @@ class NowPlaying():
 
     def repeat(self, mode='context'):
         if mode not in ['context', 'track', 'off']:
-            logging.error('NowPlaying: Invalid mode provided for track-repeat')
-            exit()
+            logging.warning('NowPlaying: Invalid mode provided for track-repeat')
+            return
         self.log('Setting repeat mode to "{}"'.format(mode))
         self.client.repeat(mode)
 
@@ -185,6 +186,11 @@ class NowPlaying():
         self._refresh()
         return milliseconds_to_mins(self.track.elapsed)
 
+    def set_volume(self, percent_vol):
+        if not 0 <= percent_vol <= 100:
+            logging.warning('NowPlaying: Invalid volume level!')
+            return
+        self.client.volume(percent_vol)
 
 if __name__ == '__main__':
     sp_client = SpotipyClient().client
