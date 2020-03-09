@@ -13,12 +13,13 @@ def pretty_print_json(blob: dict):
     # Debug tool
     print(json.dumps(blob, indent=4, sort_keys=True))
 
+
 def milliseconds_to_mins(ms: int):
     ms = float(ms)
-    seconds=int((ms/1000)%60)
-    seconds="{:02d}".format(seconds)
-    minutes=int((ms/(1000*60))%60)
-    minutes="{:02d}".format(minutes)
+    seconds = int((ms/1000) % 60)
+    seconds = "{:02d}".format(seconds)
+    minutes = int((ms/(1000*60)) % 60)
+    minutes = "{:02d}".format(minutes)
     return minutes, seconds
 
 
@@ -74,6 +75,7 @@ class Track():
         self.is_playing = track_dict['is_playing']
         self.shuffle = track_dict['shuffle_state']
         self.repeat = track_dict['repeat_state']
+        self.context_uri = track_dict['context']['uri']
         self.cover = item['album']['images'][0]['url']
         self.cover_sm = item['album']['images'][2]['url']
         # Get a string and iterable list of multiple artists (if applicable)
@@ -97,13 +99,20 @@ class NowPlaying():
     def __init__(self, client):
         self.client = client
         self.track = Track(self.client.current_playback())
+        self.log = self._info_logging
+        self.debug = self._debug_logging
 
     def _refresh(self):
-        logging.debug('NowPlaying: Updating current song...')
-        logging.debug(
-            'NowPlaying: {0} - {1}'.format(self.track.name, self.track.artist))
+        self.debug('Updating current song...')
+        self.debug('{0} - {1}'.format(self.track.name, self.track.artist))
         self.track.update(self.client.current_playback())
         # TODO: Have this communicate with frontend, so visuals/text update in tandem
+
+    def _debug_logging(self, message: str):
+        logging.debug('NowPlaying: {}'.format(message))
+
+    def _info_logging(self, message: str):
+        logging.info('NowPlaying: {}'.format(message))
 
     def clean_track_dict(self, track_dict):
         # Remove verbose (and useless) lists from the track dict
@@ -121,35 +130,41 @@ class NowPlaying():
 
     def get_track_art(self):
         image_url = self.track.cover
-        logging.info('NowPlaying: Album URL - {}'.format(image_url))
+        self.log('Album URL - {}'.format(image_url))
         return image_url
 
     def save_track_art(self, filepath='current.jpg'):
         if os.path.isfile(filepath):
             os.remove(filepath)
         filename = wget.download(self.track.cover, out=filepath, bar=None)
-        logging.info('NowPlaying: Album cover saved to {}'.format(filename))
+        self.log('Album cover saved to {}'.format(filename))
         return filename
 
     def play_pause(self):
         self._refresh()
         if self.track.is_playing:
             self.client.pause_playback()
-            logging.info('NowPlaying: Paused track')
+            self.log('Paused track')
         else:
             self.client.start_playback()
-            logging.info('NowPlaying: Resumed track')
+            self.log('Resumed track')
 
     def next(self):
-        logging.info('NowPlaying: Playing next song')
+        self.log('Playing next song')
         self.client.next_track()
         self._refresh()
 
     def previous(self):
         # NOTE: This doesn't start over the current song, like most "previous" buttons do
-        logging.info('NowPlaying: Playing previous song')
+        self.log('Playing previous song')
         self.client.previous_track()
         self._refresh()
+
+    def seek(self, ms_start):
+        if ms_start > self.track.duration:
+            logging.warning('NowPlaying: Scrub position longer than song!')
+            return
+        self.client.seek_track(ms_start)
 
     def shuffle(self, state: bool):
         self.client.shuffle(state)
@@ -158,7 +173,7 @@ class NowPlaying():
         if mode not in ['context', 'track', 'off']:
             logging.error('NowPlaying: Invalid mode provided for track-repeat')
             exit()
-        logging.info('NowPlaying: Setting repeat mode to "{}"'.format(mode))
+        self.log('Setting repeat mode to "{}"'.format(mode))
         self.client.repeat(mode)
 
     def get_sequencer_status(self):
@@ -174,7 +189,3 @@ class NowPlaying():
 if __name__ == '__main__':
     sp_client = SpotipyClient().client
     playing = NowPlaying(sp_client)
-    while True:
-        time = playing.get_progress()
-        # print('Time elapsed: {}:{}'.format(time[0], time[1]), end='\r')
-        sleep(0.25)
