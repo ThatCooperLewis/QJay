@@ -27,31 +27,38 @@ class Track():
 
 class Artist():
 
-    def __init__(self, artist_list: list):
-        self.update(artist_list)
+    def __init__(self, artists):
+        self.update(artists)
 
-    def update(self, artist_list):
-        # TODO: figure out listed format
-        self.name, self.name_list = self._parse_artist_names(artist_list)
-        self.uri, self.uri_list = self._parse_artist_uris(artist_list)
+    def update(self, artists):
+        self.name, self.name_list = self._parse_artist_names(artists)
+        self.uri, self.uri_list = self._parse_artist_uris(artists)
 
-    def _parse_artist_names(self, artists: list):
+    def _parse_artist_names(self, artists):
         artist_str, artist_list = '', []
-        for index, artist in enumerate(artists):
-            name = artist['name']
-            artist_list.append(name)
-            artist_str += name
-            if index < (len(artists) - 1):
-                artist_str += ', '
+        if type(artists) is list:
+            for index, artist in enumerate(artists):
+                name = artist['name']
+                artist_list.append(name)
+                artist_str += name
+                if index < (len(artists) - 1):
+                    artist_str += ', '
+        else: 
+            artist_str = artists['name']
+            artist_list.append(artist_str)
         return artist_str, artist_list
 
     def _parse_artist_uris(self, artists: list):
         # Set primary from first artist (usually most important)
         # Make a list of all of them
-        primary_artist_uri = artists[0]['uri']
         artist_uri_list = []
-        for artist in artists:
-            artist_uri_list.append(artist['uri'])
+        if type(artists) is list:
+            primary_artist_uri = artists[0]['uri']
+            for artist in artists:
+                artist_uri_list.append(artist['uri'])
+        else:
+            primary_artist_uri = artists['uri']
+            artist_uri_list.append(primary_artist_uri)
         return primary_artist_uri, artist_uri_list
 
 
@@ -69,4 +76,5 @@ class Album():
         self.artist = Artist(album['artists'])
 
     def add_full_details(self, album_details):
+        # For extra songs n shit
         return
