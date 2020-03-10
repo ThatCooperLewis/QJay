@@ -3,11 +3,6 @@ import json
 from boltons.iterutils import remap
 
 
-def pretty_print_json(blob: dict):
-    # Debug tool
-    return json.dumps(blob, indent=4, sort_keys=True)
-
-
 def milliseconds_to_mins(ms: int):
     ms = float(ms)
     seconds = int((ms/1000) % 60)
@@ -39,10 +34,3 @@ def remove_keys_from_dict(input_dict, key_list: list):
     bad_keys = set(key_list)
     def drop_keys(path, key, value): return key not in bad_keys
     return remap(input_dict, visit=drop_keys)
-
-
-def pretty_print_track(trackObj):
-    return '{} - {} - {}'.format(trackObj.name, trackObj.artist.name, trackObj.album.name)
-
-def pretty_print_album(albumObj):
-    return '{} - {} - {}'.format(albumObj.name, albumObj.artist.name, albumObj.type)
