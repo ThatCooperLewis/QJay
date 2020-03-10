@@ -15,6 +15,7 @@ class Logger():
 
     def error(self, message):
         logging.error('{0}: {1}'.format(self.category, message))
+        raise Exception
 
     def debug(self, message):
         logging.debug('{0}: {1}'.format(self.category, message))

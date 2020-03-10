@@ -8,7 +8,9 @@ import spotipy
 import spotipy.util as sputil
 # Custom modules
 from music_objects import Artist, Album, Track
+import config_maps
 import utils
+import debug_utils
 from logger import Logger
 
 
@@ -18,11 +20,11 @@ class SpotipyClient():
     # connection to Spotify API, so it can be passed into other classes
 
     def __init__(self):
+        _log = Logger('SpotipyClient')
+        self.error = _log.error
         username = self._get_spotipy_env('SPOTIPY_USERNAME')
         scope = self._get_spotipy_env('SPOTIPY_SCOPE')
         token = sputil.prompt_for_user_token(username, scope)
-        _log = Logger('SpotipyClient')
-        self.error = _log.error
 
         if token:
             self.client = spotipy.Spotify(auth=token)
@@ -152,44 +154,96 @@ class NowPlaying():
 
 class SearchTools():
 
-    def __init__(self, client, limit=20):
+    def __init__(self, client, limit=4):
         self.client = client
         self.limit = limit
         _log = Logger('SearchTools')
         self.log = _log.info
+        self.track_config, self.artist_config, self.album_config = config_maps.get_search_maps()
 
-    def _search(self, query, typeString, typeClass):
+    def _search(self, query: str, config_maps):
         # Pass the proper type/class to search using a given query
         # Example: _search('Lady Gaga', 'artist', Artist)
-        item_list = []
-        result = self.client.search(query, type=typeString, limit=self.limit)
-        result = utils.clean_track_dict(result)
+        types_concat = self._concatenate_types(config_maps)
+        result = self.client.search(
+            q=query,
+            limit=self.limit,
+            type=types_concat)
         if result:
-            result = result['{}s'.format(typeString)]['items']
-            self.log('# of search results: {}'.format(len(result)))
-            for item in result:
-                item_list.append(typeClass(item))
-            return item_list
+            if type(config_maps) is list:
+                return self._parse_diverse_results(result, config_maps)
+            else:
+                return self._list_result_items(config_maps, result[config_maps.types]['items'])
         else:
             return None
+
+    def _parse_diverse_results(self, result, config_maps):
+        # Construct a dict of each result category, populated with
+        parsed_results = {}
+        if type(config_maps) is list:
+            for _map in config_maps:
+                parsed_results[_map.types] = self._list_result_items(
+                    _map, result[_map.types]['items'])
+        else:
+            return self._list_result_items(config_maps, result)
+        return parsed_results
+
+    def _list_result_items(self, _map, result):
+        item_list = []
+        for item in result:
+            item_list.append(_map.typeClass(item))
+        return item_list
+
+    def _concatenate_types(self, config_maps):
+        try:
+            # Return single string if not a list
+            return config_maps.type
+        except:
+            output = ''
+            for index, config in enumerate(config_maps):
+                output += config.type
+                if index < (len(config_maps) - 1):
+                    output += ','
+            return output
 
     def set_results_limit(self, limit: int):
         self.limit = limit
 
-    # def search_all(self, query):
-        # return self._search(query, 'track,artist,album,playlist')
+    def search_all(self, query):
+        return self._search(query, [self.track_config, self.artist_config, self.album_config])
 
     def search_tracks(self, query):
-        return self._search(query, 'track', Track)
+        return self._search(query, self.track_config)
 
     def search_artists(self, query):
-        return self._search(query, 'artist', Artist)
+        return self._search(query, self.artist_config)
 
     def search_albums(self, query):
-        return self._search(query, 'album', Album)
+        return self._search(query, self.album_config)
 
     # def search_playlists(self, query):
         # return self._search(query, 'playlist')
+
+
+class TrackRetrieval():
+
+    def __init__(self, client, limit=15):
+        # Setup logger
+        _log = Logger('TrackRetrieval')
+        self.log = _log.info
+        self.error = _log.error
+
+        self.client = client
+        self.result_limit = limit
+
+    def get_album_tracks(self, album_uri):
+        try:
+            result = self.client.album_tracks(
+                album_uri, limit=self.result_limit)
+        except Exception as err:
+            self.error(err)
+        self.log(type(result))
+        self.log(result[0])
 
 
 if __name__ == '__main__':
@@ -198,9 +252,9 @@ if __name__ == '__main__':
     sp_client = SpotipyClient().client
     playing = NowPlaying(sp_client)
     search = SearchTools(sp_client)
-    tracklist = search.search_albums("King Gizzard")
-    for track in tracklist:
-        log(utils.pretty_print_album(track))
-    # with open('output.json', 'w+') as fileboi:
-        # fileboi.write(utils.pretty_print_json())
-        # fileboi.close()
+    result = search.search_albums("Plastic Beach")
+    print(len(result))
+    for album in result:
+        print(utils.pretty_print_album(album))
+    
+    
